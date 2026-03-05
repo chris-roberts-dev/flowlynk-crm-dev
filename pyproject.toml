@@ -1,0 +1,28 @@
+[project]
+name = "flowlynk"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+  "Django>=5.1,<6.0",
+  "psycopg[binary]>=3.2,<4.0",
+  "django-environ>=0.11,<0.12",
+  "pytest>=8.0,<9.0",
+  "pytest-django>=4.8,<5.0",
+  "ruff>=0.6,<1.0",
+]
+
+[tool.pytest.ini_options]
+DJANGO_SETTINGS_MODULE = "webcrm.settings.dev"
+python_files = ["test_*.py", "*_test.py"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+ignore = ["E501"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["webcrm", "apps"]

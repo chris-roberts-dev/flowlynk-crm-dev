@@ -1,0 +1,93 @@
+{
+  "roles": [
+    {
+      "code": "owner",
+      "name": "Owner",
+      "description": "Full access within the organization.",
+      "is_system": true,
+      "is_active": true,
+      "capabilities": [
+        "locations.manage",
+        "catalog.import",
+        "leads.view",
+        "leads.manage",
+        "leads.convert",
+        "quotes.view",
+        "quotes.manage",
+        "quotes.approve",
+        "pricing.preview",
+        "tasks.assign",
+        "tasks.complete",
+        "communications.view",
+        "communications.send",
+        "routes.manage",
+        "audit.view"
+      ]
+    },
+    {
+      "code": "manager",
+      "name": "Manager",
+      "description": "Operational manager for day-to-day execution.",
+      "is_system": true,
+      "is_active": true,
+      "capabilities": [
+        "locations.manage",
+        "leads.view",
+        "leads.manage",
+        "leads.convert",
+        "quotes.view",
+        "quotes.manage",
+        "pricing.preview",
+        "tasks.assign",
+        "tasks.complete",
+        "communications.view",
+        "communications.send"
+      ]
+    },
+    {
+      "code": "sales",
+      "name": "Sales",
+      "description": "Sales team: manage leads and quotes; no ops/routing.",
+      "is_system": false,
+      "is_active": true,
+      "capabilities": [
+        "leads.view",
+        "leads.manage",
+        "leads.convert",
+        "quotes.view",
+        "quotes.manage",
+        "pricing.preview",
+        "communications.view",
+        "communications.send",
+        "tasks.complete"
+      ]
+    },
+    {
+      "code": "ops",
+      "name": "Operations",
+      "description": "Operations: tasks, routing, and communications visibility.",
+      "is_system": false,
+      "is_active": true,
+      "capabilities": [
+        "locations.manage",
+        "tasks.assign",
+        "tasks.complete",
+        "communications.view",
+        "routes.manage"
+      ]
+    },
+    {
+      "code": "staff",
+      "name": "Staff",
+      "description": "General staff: view-only sales objects, complete tasks.",
+      "is_system": true,
+      "is_active": true,
+      "capabilities": [
+        "leads.view",
+        "quotes.view",
+        "tasks.complete",
+        "communications.view"
+      ]
+    }
+  ]
+}
