@@ -94,6 +94,41 @@ def ensure_role_template_for_org(
 
 
 @transaction.atomic
+def ensure_role_templates_for_org(
+    *, organization: Organization, template_codes: list[str] | None = None
+) -> BootstrapResult:
+    """
+    Ensure multiple ROLE_TEMPLATES exist for the org (idempotent).
+    If template_codes is None, applies all templates.
+    """
+    codes = template_codes or list(ROLE_TEMPLATES.keys())
+
+    created_caps_total = 0
+    created_roles_total = 0
+    updated_roles_total = 0
+    created_role_caps_total = 0
+
+    # Seed once up-front for speed (still safe to call again inside template creation)
+    created_caps_total += ensure_capabilities_seeded()
+
+    for code in codes:
+        res = ensure_role_template_for_org(
+            organization=organization, template_code=code
+        )
+        created_caps_total += res.created_capabilities
+        created_roles_total += res.created_roles
+        updated_roles_total += res.updated_roles
+        created_role_caps_total += res.created_role_capabilities
+
+    return BootstrapResult(
+        created_capabilities=created_caps_total,
+        created_roles=created_roles_total,
+        updated_roles=updated_roles_total,
+        created_role_capabilities=created_role_caps_total,
+    )
+
+
+@transaction.atomic
 def assign_role_to_membership(
     *, organization: Organization, membership_id: int, role_code: str
 ) -> int:

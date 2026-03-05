@@ -1,11 +1,16 @@
 from __future__ import annotations
 
-from django.contrib import admin
+from django.contrib import admin, messages
+from django.http import HttpRequest
+from django.shortcuts import redirect
+from django.urls import path
 
 from apps.common.admin.rbac import RBACPermissionAdminMixin
 from apps.common.admin.tenant import TenantAdminMixin
 from webcrm.admin import admin_site
 
+from .bootstrap import ensure_role_templates_for_org
+from .defaults import ROLE_TEMPLATES
 from .models import (
     Capability,
     MembershipCapabilityGrant,
@@ -47,12 +52,20 @@ class RoleCapabilityInline(admin.TabularInline):
 
 @admin.register(Role, site=admin_site)
 class RoleAdmin(RBACPermissionAdminMixin, TenantAdminMixin):
+    """
+    Tenant admin UX:
+    - In tenant mode, provide a button to seed/update org roles from platform templates.
+    - Idempotent: safe to click multiple times.
+    """
+
     required_capabilities = {
         "view": "rbac.manage",
         "add": "rbac.manage",
         "change": "rbac.manage",
         "delete": "rbac.manage",
     }
+
+    change_list_template = "admin/rbac/role/change_list.html"
 
     list_display = (
         "name",
@@ -67,6 +80,38 @@ class RoleAdmin(RBACPermissionAdminMixin, TenantAdminMixin):
     ordering = ("code",)
     readonly_fields = ("created_at", "updated_at")
     inlines = [RoleCapabilityInline]
+
+    def get_urls(self):
+        urls = super().get_urls()
+        custom = [
+            path(
+                "apply-templates/",
+                self.admin_site.admin_view(self.apply_templates_view),
+                name="rbac_role_apply_templates",
+            ),
+        ]
+        return custom + urls
+
+    def apply_templates_view(self, request: HttpRequest):
+        """
+        Seed/update all ROLE_TEMPLATES for the active org.
+        Tenant required (handled by TenantAdminMixin); RBAC enforced (RBACPermissionAdminMixin).
+        """
+        org = getattr(request, "organization", None)
+        if org is None:
+            messages.error(request, "No active tenant organization.")
+            return redirect("admin:rbac_role_changelist")
+
+        res = ensure_role_templates_for_org(
+            organization=org, template_codes=list(ROLE_TEMPLATES.keys())
+        )
+        messages.success(
+            request,
+            "Default roles applied. "
+            f"created_roles={res.created_roles}, updated_roles={res.updated_roles}, "
+            f"role_capabilities={res.created_role_capabilities}",
+        )
+        return redirect("admin:rbac_role_changelist")
 
 
 @admin.register(MembershipRole, site=admin_site)

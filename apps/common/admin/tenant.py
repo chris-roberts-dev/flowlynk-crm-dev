@@ -35,6 +35,18 @@ class TenantAdminMixin(admin.ModelAdmin):
             )
         return org
 
+    def _base_queryset(self):
+        """
+        Some tenant models use a custom manager/queryset with `.unscoped()`,
+        while others (like Membership) may use the default Manager.
+
+        Always return a queryset that can be safely filtered.
+        """
+        mgr = self.model._default_manager
+        if hasattr(mgr, "unscoped") and callable(getattr(mgr, "unscoped")):
+            return mgr.unscoped().all()
+        return mgr.all()
+
     def get_exclude(self, request: HttpRequest, obj=None):
         # Hide org in tenant-mode; show in platform-mode
         base_exclude = {"created_by", "updated_by"}
@@ -43,18 +55,31 @@ class TenantAdminMixin(admin.ModelAdmin):
         return tuple(base_exclude | {"organization"})
 
     def get_queryset(self, request: HttpRequest):
+        qs = self._base_queryset()
+
         if self.is_platform_mode(request):
-            return self.model.objects.unscoped().all()
+            return qs
+
         org = self.get_organization(request)
-        return self.model.objects.unscoped().filter(organization_id=org.id)
+
+        # TenantAdminMixin is intended for tenant-owned models.
+        # Filter if the model has organization_id, otherwise deny-by-default.
+        if hasattr(self.model, "organization_id"):
+            return qs.filter(organization_id=org.id)
+
+        return qs.none()
 
     def save_model(self, request: HttpRequest, obj, form, change):
         if not self.is_platform_mode(request):
             org = self.get_organization(request)
-            obj.organization_id = org.id  # force org in tenant mode
+            if hasattr(obj, "organization_id"):
+                obj.organization_id = org.id  # force org in tenant mode
         else:
-            # Platform mode: require org explicitly set
-            if getattr(obj, "organization_id", None) is None:
+            # Platform mode: require org explicitly set (for tenant-owned models)
+            if (
+                hasattr(obj, "organization_id")
+                and getattr(obj, "organization_id", None) is None
+            ):
                 raise ValueError("organization must be set in platform mode.")
 
         # Audit fields

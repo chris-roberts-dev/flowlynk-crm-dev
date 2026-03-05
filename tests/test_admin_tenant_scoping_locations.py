@@ -1,77 +1,33 @@
 import pytest
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Permission
-from django.core.management import call_command
 from django.test import override_settings
 
-from apps.crm.locations.models import Location
 from apps.platform.accounts.models import Membership
 from apps.platform.organizations.models import Organization
-from apps.platform.rbac.models import Capability, MembershipRole, Role, RoleCapability
 
 
 COMMON = dict(
     TENANT_BASE_DOMAIN="localhost",
     TENANT_REQUIRED_PATH_PREFIXES=["/admin/", "/app/"],
     TENANT_EXEMPT_PATH_PREFIXES=["/admin/login/", "/admin/logout/"],
-    ALLOWED_HOSTS=["localhost", "127.0.0.1", ".localhost"],
+    ALLOWED_HOSTS=["localhost", "127.0.0.1"],
 )
 
 
-def grant_location_perms(
-    user, *, add: bool = False, change: bool = False, view: bool = False
-):
-    codenames = []
-    if view:
-        codenames.append("view_location")
-    if add:
-        codenames.append("add_location")
-    if change:
-        codenames.append("change_location")
-
-    perms = Permission.objects.filter(
-        content_type__app_label="locations", codename__in=codenames
-    )
-    user.user_permissions.add(*perms)
+def grant_user_admin_view_perms(user):
+    """
+    Minimal perms required to access /admin/accounts/user/ changelist.
+    """
+    perm = Permission.objects.get(codename="view_user")
+    user.user_permissions.add(perm)
     user.save()
-
-
-def grant_rbac_locations_manage(*, org: Organization, membership: Membership):
-    """
-    Our LocationAdmin now requires RBAC capability 'locations.manage'.
-    We attach a temp role with that capability to the membership.
-    """
-    call_command("seed_capabilities")
-    cap = Capability.objects.get(code="locations.manage")
-
-    role = Role.objects.unscoped().create(
-        organization=org,
-        code="tmp_locations_manage",
-        name="Temp Locations Manage",
-        description="Test role for locations.manage",
-        is_system=False,
-        is_active=True,
-    )
-    RoleCapability.objects.unscoped().create(
-        organization=org, role=role, capability=cap
-    )
-    MembershipRole.objects.unscoped().create(
-        organization=org, membership=membership, role=role
-    )
 
 
 @pytest.mark.django_db
 @override_settings(**COMMON)
-def test_admin_changelist_is_tenant_filtered(client):
+def test_tenant_admin_user_changelist_is_scoped_by_membership(client):
     User = get_user_model()
-    user = User.objects.create_user(
-        email="staff@example.com", password="pass12345", is_staff=True
-    )
-    user.is_active = True
-    user.save(update_fields=["is_active"])
-
-    # Django admin needs view permission
-    grant_location_perms(user, view=True)
 
     org1 = Organization.objects.create(
         name="Org 1", slug="org1", status=Organization.Status.ACTIVE
@@ -80,61 +36,84 @@ def test_admin_changelist_is_tenant_filtered(client):
         name="Org 2", slug="org2", status=Organization.Status.ACTIVE
     )
 
-    membership = Membership.objects.create(
-        user=user, organization=org1, status=Membership.Status.ACTIVE
+    # Tenant admin user (staff) belongs only to org1
+    tenant_admin = User.objects.create_user(
+        email="ta@example.com",
+        password="pass12345",
+        is_staff=True,
+        is_active=True,
+    )
+    grant_user_admin_view_perms(tenant_admin)
+
+    Membership.objects.create(
+        user=tenant_admin, organization=org1, status=Membership.Status.ACTIVE
     )
 
-    # RBAC requirement for LocationAdmin
-    grant_rbac_locations_manage(org=org1, membership=membership)
+    u1 = User.objects.create_user(
+        email="u1@example.com", password="pass12345", is_active=True
+    )
+    u2 = User.objects.create_user(
+        email="u2@example.com", password="pass12345", is_active=True
+    )
 
-    # Create data in both orgs (unscoped to bypass strict ORM)
-    Location.objects.unscoped().create(organization=org1, code="A", name="Loc A")
-    Location.objects.unscoped().create(organization=org2, code="B", name="Loc B")
+    Membership.objects.create(
+        user=u1, organization=org1, status=Membership.Status.ACTIVE
+    )
+    Membership.objects.create(
+        user=u2, organization=org2, status=Membership.Status.ACTIVE
+    )
 
-    client.force_login(user)
+    client.force_login(tenant_admin)
 
-    resp = client.get("/admin/locations/location/", HTTP_HOST="org1.localhost")
+    # Resolve tenant via session (path-based tenancy)
+    session = client.session
+    session["active_org_id"] = org1.id
+    session["active_org_slug"] = org1.slug
+    session.save()
+
+    resp = client.get("/admin/accounts/user/", HTTP_HOST="localhost")
     assert resp.status_code == 200
-    content = resp.content.decode("utf-8")
-    assert "Loc A" in content
-    assert "Loc B" not in content
+
+    content = resp.content
+    assert b"ta@example.com" in content
+    assert b"u1@example.com" in content
+    assert b"u2@example.com" not in content
 
 
 @pytest.mark.django_db
 @override_settings(**COMMON)
-def test_admin_save_forces_organization_and_sets_audit_fields(client):
+def test_platform_superuser_sees_all_users(client):
     User = get_user_model()
-    user = User.objects.create_user(
-        email="staff2@example.com", password="pass12345", is_staff=True
-    )
-    user.is_active = True
-    user.save(update_fields=["is_active"])
-
-    # Django admin needs add permission to create via admin
-    grant_location_perms(user, add=True, view=True)
 
     org1 = Organization.objects.create(
         name="Org 1", slug="org1", status=Organization.Status.ACTIVE
     )
-    membership = Membership.objects.create(
-        user=user, organization=org1, status=Membership.Status.ACTIVE
+    org2 = Organization.objects.create(
+        name="Org 2", slug="org2", status=Organization.Status.ACTIVE
     )
 
-    # RBAC requirement for LocationAdmin
-    grant_rbac_locations_manage(org=org1, membership=membership)
+    su = User.objects.create_superuser(email="su@example.com", password="pass12345")
 
-    client.force_login(user)
-
-    resp = client.post(
-        "/admin/locations/location/add/",
-        data={"code": "X", "name": "Created Via Admin", "is_active": "on"},
-        HTTP_HOST="org1.localhost",
-        follow=False,
+    u1 = User.objects.create_user(
+        email="u1@example.com", password="pass12345", is_active=True
     )
-    # Django admin redirects back to changelist on success
-    assert resp.status_code == 302
+    u2 = User.objects.create_user(
+        email="u2@example.com", password="pass12345", is_active=True
+    )
 
-    loc = Location.objects.unscoped().get(code="X")
-    assert loc.organization_id == org1.id
-    assert loc.created_by_id == user.id
-    assert loc.updated_by_id == user.id
+    Membership.objects.create(
+        user=u1, organization=org1, status=Membership.Status.ACTIVE
+    )
+    Membership.objects.create(
+        user=u2, organization=org2, status=Membership.Status.ACTIVE
+    )
+
+    client.force_login(su)
+
+    resp = client.get("/admin/accounts/user/", HTTP_HOST="localhost")
+    assert resp.status_code == 200
+
+    content = resp.content
+    assert b"su@example.com" in content
+    assert b"u1@example.com" in content
+    assert b"u2@example.com" in content

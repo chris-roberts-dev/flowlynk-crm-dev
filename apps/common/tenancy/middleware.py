@@ -46,7 +46,7 @@ def _extract_org_slug_from_host(host: str) -> Optional[str]:
     return slug
 
 
-def _extract_org_slug_from_path(request: HttpRequest) -> Optional[str]:
+def _extract_org_slug_from_login_path(request: HttpRequest) -> Optional[str]:
     path = request.path_info or ""
     if not path.startswith("/login/"):
         return None
@@ -59,12 +59,29 @@ def _extract_org_slug_from_path(request: HttpRequest) -> Optional[str]:
     return slug
 
 
+def _extract_org_slug_from_t_path(request: HttpRequest) -> Optional[str]:
+    """
+    /t/<org_slug>/... is the primary dev-friendly path-based tenant selection.
+    """
+    path = request.path_info or ""
+    if not path.startswith("/t/"):
+        return None
+    remainder = path[len("/t/") :]
+    slug = remainder.split("/", 1)[0].strip().lower()
+    if not slug:
+        return None
+    if not SLUG_RE.match(slug):
+        return None
+    return slug
+
+
 class TenantResolutionMiddleware(MiddlewareMixin):
     """
     Priority:
-      1) Subdomain
-      2) /login/{org_slug}
-      3) Session fallback: active_org_id
+      1) /t/<org_slug>/...
+      2) /login/<org_slug>/...
+      3) Subdomain (legacy/optional)
+      4) Session fallback: active_org_id
     Platform superuser:
       - may access /admin/ without tenant context (platform mode)
     """
@@ -75,10 +92,12 @@ class TenantResolutionMiddleware(MiddlewareMixin):
 
         path = request.path_info or ""
 
-        # Resolve tenant by host/path first
-        slug = _extract_org_slug_from_host(request.get_host())
+        # Resolve tenant by path/host first
+        slug = _extract_org_slug_from_t_path(request)
         if slug is None:
-            slug = _extract_org_slug_from_path(request)
+            slug = _extract_org_slug_from_login_path(request)
+        if slug is None:
+            slug = _extract_org_slug_from_host(request.get_host())
 
         org: Organization | None = None
         resolved_by_host_or_path = False

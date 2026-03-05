@@ -25,7 +25,9 @@ CAPABILITIES: dict[str, str] = {
     "audit.view": "View audit log entries.",
 }
 
+
 ROLE_TEMPLATES: dict[str, dict] = {
+    # ---- Full control ----
     "owner": {
         "name": "Owner",
         "description": "Full access within the organization.",
@@ -33,9 +35,56 @@ ROLE_TEMPLATES: dict[str, dict] = {
         "is_active": True,
         "capabilities": list(CAPABILITIES.keys()),
     },
-    "manager": {
-        "name": "Manager",
-        "description": "Operational manager: locations, leads, quotes, tasks.",
+    # ---- Management tiers (MVP uses same capability set; later we scope by region/market/location) ----
+    "regional_manager": {
+        "name": "Regional Manager",
+        "description": "Manage operations across a region (MVP: org-wide manager privileges).",
+        "is_system": True,
+        "is_active": True,
+        "capabilities": [
+            "locations.manage",
+            "catalog.import",
+            "leads.view",
+            "leads.manage",
+            "leads.convert",
+            "quotes.view",
+            "quotes.manage",
+            "quotes.approve",
+            "pricing.preview",
+            "tasks.assign",
+            "tasks.complete",
+            "communications.view",
+            "routes.manage",
+            "audit.view",
+            # Regional managers may assign roles, but not edit role definitions
+            "rbac.assign",
+        ],
+    },
+    "market_manager": {
+        "name": "Market Manager",
+        "description": "Manage operations across a market (MVP: org-wide manager privileges).",
+        "is_system": True,
+        "is_active": True,
+        "capabilities": [
+            "locations.manage",
+            "catalog.import",
+            "leads.view",
+            "leads.manage",
+            "leads.convert",
+            "quotes.view",
+            "quotes.manage",
+            "pricing.preview",
+            "tasks.assign",
+            "tasks.complete",
+            "communications.view",
+            "routes.manage",
+            "audit.view",
+            "rbac.assign",
+        ],
+    },
+    "location_manager": {
+        "name": "Location Manager",
+        "description": "Manage a specific location (MVP: org-wide manager privileges).",
         "is_system": True,
         "is_active": True,
         "capabilities": [
@@ -49,7 +98,38 @@ ROLE_TEMPLATES: dict[str, dict] = {
             "tasks.assign",
             "tasks.complete",
             "communications.view",
-            "rbac.assign",
+            "routes.manage",
+        ],
+    },
+    # ---- Functional roles ----
+    "sales": {
+        "name": "Sales",
+        "description": "Sales workflow: leads/quotes/pricing and customer communications.",
+        "is_system": True,
+        "is_active": True,
+        "capabilities": [
+            "leads.view",
+            "leads.manage",
+            "leads.convert",
+            "quotes.view",
+            "quotes.manage",
+            "pricing.preview",
+            "communications.view",
+            "communications.send",
+            "tasks.complete",
+        ],
+    },
+    "ops": {
+        "name": "Ops",
+        "description": "Operations workflow: tasks, routing, and internal comms visibility.",
+        "is_system": True,
+        "is_active": True,
+        "capabilities": [
+            "locations.manage",
+            "tasks.assign",
+            "tasks.complete",
+            "routes.manage",
+            "communications.view",
         ],
     },
     "staff": {
@@ -62,6 +142,18 @@ ROLE_TEMPLATES: dict[str, dict] = {
             "quotes.view",
             "tasks.complete",
             "communications.view",
+        ],
+    },
+    "viewer": {
+        "name": "Viewer",
+        "description": "Read-only access to key areas.",
+        "is_system": True,
+        "is_active": True,
+        "capabilities": [
+            "leads.view",
+            "quotes.view",
+            "communications.view",
+            "audit.view",
         ],
     },
 }

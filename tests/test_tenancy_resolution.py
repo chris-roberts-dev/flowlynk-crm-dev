@@ -15,6 +15,22 @@ COMMON_OVERRIDES = dict(
 
 @pytest.mark.django_db
 @override_settings(**COMMON_OVERRIDES)
+def test_tenant_entrypoint_sets_session_and_redirects_to_admin(client):
+    Organization.objects.create(
+        name="Acme", slug="acme", status=Organization.Status.ACTIVE
+    )
+
+    resp = client.get("/t/acme/admin/", HTTP_HOST="localhost", follow=False)
+    assert resp.status_code == 302
+    assert resp["Location"] == "/admin/"
+
+    session = client.session
+    assert session["active_org_slug"] == "acme"
+    assert isinstance(session["active_org_id"], int)
+
+
+@pytest.mark.django_db
+@override_settings(**COMMON_OVERRIDES)
 def test_resolves_tenant_from_subdomain(client):
     Organization.objects.create(
         name="Acme", slug="acme", status=Organization.Status.ACTIVE

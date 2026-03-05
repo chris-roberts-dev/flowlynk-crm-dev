@@ -1,3 +1,5 @@
+import io
+
 import pytest
 from django.core.management import call_command
 
@@ -8,13 +10,18 @@ from apps.platform.rbac.models import MembershipRole, Role
 
 @pytest.mark.django_db
 def test_bootstrap_org_admin_grants_staff_and_permissions_and_owner_role():
+    out = io.StringIO()
     call_command(
         "bootstrap_org_admin",
         org_slug="acme",
         org_name="Acme Co",
         email="admin@acme.com",
         password="pass12345",
+        stdout=out,
     )
+
+    output = out.getvalue()
+    assert "/t/acme/admin/" in output
 
     org = Organization.objects.get(slug="acme")
     user = User.objects.get(email="admin@acme.com")
@@ -70,3 +77,25 @@ def test_bootstrap_org_admin_is_idempotent():
         .count()
         == 1
     )
+
+
+@pytest.mark.django_db
+def test_bootstrap_org_admin_dry_run_makes_no_changes():
+    out = io.StringIO()
+    call_command(
+        "bootstrap_org_admin",
+        org_slug="dryco",
+        org_name="Dry Co",
+        email="dry@dryco.com",
+        password="pass12345",
+        dry_run=True,
+        stdout=out,
+    )
+
+    output = out.getvalue()
+    assert "Dry-run" in output
+    assert "/t/dryco/admin/" in output
+
+    assert Organization.objects.filter(slug="dryco").count() == 0
+    assert User.objects.filter(email="dry@dryco.com").count() == 0
+    assert Membership.objects.count() == 0

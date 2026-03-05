@@ -20,9 +20,12 @@ if ENV_FILE.exists():
 SECRET_KEY = env("SECRET_KEY", default="insecure-dev-key-change-me")
 DEBUG = env.bool("DEBUG", default=False)
 
-ALLOWED_HOSTS = [
-    h.strip() for h in env("ALLOWED_HOSTS", default="").split(",") if h.strip()
-]
+# Hosts
+_allowed_hosts_raw = env(
+    "ALLOWED_HOSTS",
+    default="localhost,127.0.0.1,.localhost",
+)
+ALLOWED_HOSTS = [h.strip() for h in _allowed_hosts_raw.split(",") if h.strip()]
 
 CSRF_TRUSTED_ORIGINS = [
     o.strip() for o in env("CSRF_TRUSTED_ORIGINS", default="").split(",") if o.strip()
@@ -82,7 +85,6 @@ MIDDLEWARE = [
     "apps.common.tenancy.middleware.TenantResolutionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
-    "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]

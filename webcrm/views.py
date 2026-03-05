@@ -77,6 +77,31 @@ class ClearPendingLoginView(View):
         return redirect("email-discovery")
 
 
+class TenantAdminEntrypointView(View):
+    """
+    /t/<org_slug>/admin/ sets tenant affinity in session and redirects to /admin/.
+
+    This avoids subdomain cookies/CSRF issues by keeping everything on one host.
+    """
+
+    def get(self, request: HttpRequest, org_slug: str) -> HttpResponse:
+        org = (
+            Organization.objects.filter(
+                slug=org_slug, status=Organization.Status.ACTIVE
+            )
+            .only("id", "slug", "name", "status")
+            .first()
+        )
+        if not org:
+            raise Http404("Organization not found.")
+
+        request.session["active_org_id"] = org.id
+        request.session["active_org_slug"] = org.slug
+
+        # Redirect into admin on same host; middleware will resolve tenant from session.
+        return redirect("/admin/")
+
+
 class TenantLoginView(View):
     def get(self, request: HttpRequest, org_slug: str) -> HttpResponse:
         org = getattr(request, "organization", None)
@@ -156,6 +181,7 @@ class TenantLoginView(View):
 
         request.session.pop(PENDING_EMAIL_SESSION_KEY, None)
 
+        # ✅ Same-host redirect: no subdomain cookies; user enters password once.
         return redirect("/admin/")
 
 
