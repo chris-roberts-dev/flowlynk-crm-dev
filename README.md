@@ -115,7 +115,7 @@ FlowLynk is a Django + Postgres multi-tenant SaaS CRM for service + sales busine
 ---
 
 # Detailed remaining items (roadmap / backlog for co-development)
-This is the “what’s left” list you can feed into ChatGPT to co-develop in stories.
+This is the “what’s left”.
 
 ## EPIC 2 — Tenancy hardening & invariants
 - Tenant filtering for UserAdmin (tenant admins should only see users with membership in that org)
